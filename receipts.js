@@ -15,7 +15,10 @@ var gmail = google.gmail('v1');
 var authenticator = require('./GoogleAuthenticator.js');
 
 var QUERY_UBER_MESSAGES = 'from:Uber Receipts';
-var PATTERN_UBER_RIDE_COST = '[\\₱]\\d+.\\d+';
+var PATTERN_UBER_RIDE_COST = '(\\$|SGD\ )\\d+.\\d+';
+var PATTERN_UBER_EATS = 'uberEATS';
+//var PATTERN_UBER_RIDE_COST = '₨\\d+.\\d+';
+
 var CONCURRENT_MESSAGE_REQUEST_SIZE = 250;
 
 authenticator.authorize(function(err, result) {
@@ -32,7 +35,7 @@ function computeUberExpenses(auth) {
                 if (process.argv.length == 4) {
                     QUERY_UBER_MESSAGES += " date-begin:" + process.argv[2] + " date-end:" + process.argv[3];
                 }
-                _listAllMessages(auth, QUERY_UBER_MESSAGES, function(err, messages) {
+                _listAllMessages(auth, QUERY_UBER_MESSAGES, function(err, messages) {                
                     return done(err, _.pluck(messages, 'id'));
                 });
             },
@@ -45,8 +48,23 @@ function computeUberExpenses(auth) {
                 var expenses = [];
                 async.each(snippets, function(snippet, callback) {
                         var expense = {};
+                        var match_eats = snippet.match(PATTERN_UBER_EATS);
+
+                        if(match_eats) {
+                            console.log("Skipping UberEATS");
+                            return callback();
+                        }
+
                         var match = snippet.match(PATTERN_UBER_RIDE_COST);
-                        if (match) expense.amount = match[0].substring(1);
+                        
+                        if (match) {                        
+                            var amt = match[0].substring(1);
+                            if(isNaN(amt)) {
+                                amt = match[0].substring(4);
+                            }
+                            console.log(match[0]);
+                            expense.amount = amt;
+                        } 
                         else expense.amount = "0.00";
                         expense.hash = crypto.createHash('md5').update(snippet).digest('hex');
                         expenses.push(expense);
